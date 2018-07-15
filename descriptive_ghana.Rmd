@@ -1,0 +1,242 @@
+---
+title: 'Describing the food environment: Ghana'
+output:
+  html_document:
+    df_print: paged
+---
+
+The document provides descriptive analyses of the food environment for Ghana utilising the data collected as part of the DFC and TACLED projects.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Load and tidy data
+source("./tidy_gis_data_ghana.R")
+library(data.table)
+outlets <- as.data.table(outlets)
+```
+
+There were 413 data points (food outlets or advertisements) recorded within the data for Accra, and 208 for Ho. First, we will compare the number of outlets with and without advertisements, and the number of advertisements only for the two regions to examine which data were captured. 
+
+```{r}
+
+table <- outlets[, list(Freq = .N), by = c("location", "gis_itemname")]
+table <- table[order(location,gis_itemname)]
+table$Percentage <- NA
+table$Percentage[table$location == "Accra"] <- format(round((table$Freq[table$location == "Accra"] / 413) * 100,2), nsmall=2)
+table$Percentage[table$location == "Ho"] <- format(round((table$Freq[table$location == "Ho"] / 208) * 100,2), nsmall=2)
+table
+
+```
+
+Advertisements were less likely to be found alone (though more common in Accra (4.4%) than compared to Ho (1.9%)); they were more likely to have been found in conjunction with food outlets. There was a smaller proportion of outlets containing advertisements in Accra (25.4%) than Ho (39.9%). The majority of outlets contained no advertisements in both locations (70.2% in Accra vs 58.2% Ho).
+
+Next, we considered the types of outlets that were found (the blank values here are advertisements only). 
+
+```{r}
+
+table2 <- outlets[, list(Freq = .N), by = c("location", "outlet_type")]
+table2 <- table2[order(location,outlet_type)]
+table2$Percentage <- NA
+table2$Percentage[table2$location == "Accra"] <- format(round((table2$Freq[table2$location == "Accra"] / 413) * 100,2), nsmall=2)
+table2$Percentage[table2$location == "Ho"] <- format(round((table2$Freq[table2$location == "Ho"] / 208) * 100,2), nsmall=2)
+table2
+
+```
+
+The data reveal different environments for Accra and Ho. In Accra, food outlets were dominated by vegetable/fruit/food stand/table top (60.5%), with only Kiosks (14%), Shops (9.4%) or Drinking bar/pub (8.2%) contributing large quantities elsewhere. In Ho, there is a more even spread of outlets. The most common outlet is a Shop (38%), followed by vegetable/fruit/food stand/table top (20.7%) and Local Vendors (19.7%). Both areas contained only a single market.
+
+We can also examine the types of adverts found as well.
+
+```{r}
+
+varNames <- c("billboard_adv", "poster_adv", "onsite_adv", "painting_adv")
+table_adv <- data.frame(Var1 = character(), Freq = double(), Location = character())
+
+j <- 1
+for (i in 1:4) {
+    
+    i <- i + 107
+    
+    # Accra
+    temp <- outlets[outlets$location == "Accra" & outlets$advert == 1,] # For adverts only
+    
+      # Calculate percentage for each advert type
+      hold <- as.data.frame(table(temp[[i]]))
+      #hold[,1] <- as.numeric(hold[,1])
+      #hold[,2] <- as.numeric(hold[,2])
+      #hold[2,1][is.na(hold[2,1])] <- 1 # In case missing - if has zero's 1 then you will have a line as missing causaing issues.
+      #hold[2,2][is.na(hold[2,2])] <- 0 
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Accra"
+      
+      # Save result
+      table_adv <- rbind(table_adv, hold[4,])
+      
+    # Ho
+    temp <- outlets[outlets$location == "Ho" & outlets$advert == 1,] # For adverts only
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      #hold[,1] <- as.numeric(hold[,1])
+      #hold[,2] <- as.numeric(hold[,2])
+      #hold[2,1][is.na(hold[2,1])] <- 1
+      #hold[2,2][is.na(hold[2,2])] <- 0 
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Ho"
+    
+      # Save result
+      table_adv <- rbind(table_adv, hold[4,])
+    
+    j <- j + 1
+    i <- i - 107
+    
+}
+
+names(table_adv)[names(table_adv)=="Var1"] <- "Advert" # Tidy up names
+names(table_adv)[names(table_adv)=="Freq"] <- "Percentage"
+table_adv <- table_adv[order(table_adv$Location),] # Order it
+table_adv <- table_adv[,c(3,1,2)]
+
+table_adv
+
+
+```
+
+The above percentages are as a total of all outlets with adverts and adverts only. Posters were the most common type of advert found by far particualrly in Accra (78%) but also high in Ho (56%). The largest difference found was for 'On Site/Front of Outlet' advertisements which were more commonly found in Ho (40%) than Accra (24%). Large scale paintings were also more common in Ho (23%) than Accra (19%). There were few billboards found at all - none in Accra and 8% in Ho. The low amount of billboards reflects that data collection were mainly neighbourhoods and fieldwork revealed that billboards were mainly found alongside main roads.
+
+We then examined the most popular foods sold.
+
+```{r}
+varNames <- c("grain_cereal", "fresh_meat_poultry", "fresh_fish_shellfish", "procssd_fried_meat_poultry", "procssd_fried_fish", "trad_mixed_dishes", "modern_mixed_dishes", "soups_stews", 
+              "fried_roots_tubers_plntn_pots", "nonfried_roots_tubers_plntn_pots", "fruits", "vegetables", "cakes_sweets", "savoury_snacks_pies", "milk", "fresh_juices", 
+              "alcohol", "sugar_sweet_spreads", "sodas_sweetened_bevs", "tea_coffee", "fats_oils", "nuts_seeds", "legumes_pulses", "condiments", "eggs", "other")
+table3 <- data.frame(Var1 = character(), Freq = double(), Location = character())
+
+j <- 1
+for (i in 1:26) {
+    
+    i <- i + 14
+
+    # Accra
+    temp <- outlets[outlets$location == "Accra",]
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Accra"
+      
+      # Save result
+      table3 <- rbind(table3, hold[4,])
+      
+    # Ho
+    temp <- outlets[outlets$location == "Ho",]
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Ho"
+    
+      # Save result
+      table3 <- rbind(table3, hold[4,])
+    
+    j <- j + 1
+    i <- i - 14
+    
+}
+
+names(table3)[names(table3)=="Var1"] <- "Food"
+names(table3)[names(table3)=="Freq"] <- "Percentage"
+table3 <- table3[order(table3$Location),]
+table3 <- table3[,c(3,1,2)]
+
+table3
+
+```
+
+There are few if any food items that have a smaller percentage in Accra - each food is more common in Ho. There are several possible explanations for this. It may reflect the differences in sites by outlet types - Accra dominated by 'vegetable/fruit/food stand/table top' which may be less diverse and focus on selling single items, whereas Ho featured more shops. 
+
+In Accra, the most common item on sale were fats/oils (33.7%) - i.e. for frying/cooking purposes, followed by sugar/sweetened spreads (24.9%), milk and milk products (23.7%), tea/coffee (43.8%), grains and cereals (23.2%) and soups/stews (26.4%). The least common was fruits (2.7%) and sodas/sweetened beverages (3.9%).
+
+In Ho, the most common food was grains and cereals (61.5%), followed by fats/oils (46.6%), processed or fried fish or shellfish (46.2%), cakes/sweets (45.2%) and non-fried roots etc (40.9%). The least common was modern mixed dishes (4.3%) and fruits (5.8%).
+
+Lastly, we examined the most common foods advertised (only for outlets advertising food).
+
+```{r}
+varNames <- c("adv_grain_cereal", "adv_fresh_meat_poultry", "adv_fresh_fish_shellfish", "adv_procssd_fried_meat_poultry", "adv_procssd_fried_fish", "adv_trad_mixed_dishes",
+              "adv_modern_mixed_dishes", "adv_fried_roots_tubers_plntn_pots", "adv_nonfried_roots_tubers_plntn_pots", "adv_fruits", "adv_vegetables", 
+              "adv_cakes_sweets", "adv_savoury_snacks_pies", "adv_milk", "adv_fresh_juices", "adv_alcohol", "adv_sugar_sweet_spreads", "adv_sodas_sweetened_bevs", "adv_tea_coffee",
+              "adv_fats_oils", "adv_nuts_seeds", "adv_legumes_pulses", "adv_soups_stews", "adv_eggs", "adv_condiments", "adv_other")
+
+table4 <- data.frame(Var1 = character(), Freq = double(), Location = character())
+
+j <- 1
+for (i in 1:26) {
+    
+    i <- i + 50
+
+    # Accra
+    temp <- outlets[outlets$location == "Accra" & outlets$advert == 1,]
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Accra"
+      
+      # Save result
+      table4 <- rbind(table4, hold[4,])
+      
+    # Ho
+    temp <- outlets[outlets$location == "Ho" & outlets$advert == 1,]
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+      hold$Location <- "Ho"
+    
+      # Save result
+      table4 <- rbind(table4, hold[4,])
+    
+    j <- j + 1
+    i <- i - 52
+    i <- i + 1
+}
+
+names(table4)[names(table4)=="Var1"] <- "Food"
+names(table4)[names(table4)=="Freq"] <- "Percentage"
+table4 <- table4[order(table4$Location),]
+table4 <- table4[,c(3,1,2)]
+
+table4
+
+```
+
+Advertisements in Accra were dominated by sodas/sweetened beverages (56.9%), alcohol (33.3%) and to a lesser extent savoury snacks and pies (11.4%). Other foods made up trivial shares. In Ho, there were a greater variety of foods advertised. Staples such as grains anc cereals (21.8%), fresh meat and poultry (17.2%) and fresh fish or shellfish (13.8%) were common. There was a share in the most common advert between sugar sweetened spreads or alcohol (each 33.3%). Milk and milk-related products were also common (27.6%) - could this be Milo?

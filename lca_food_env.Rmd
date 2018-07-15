@@ -1,0 +1,736 @@
+---
+title: "Classifying the food environment"
+author: Mark A Green
+output: html_notebook
+---
+
+We have collected a complex amount of information about the food environments within the three locations: Accra and Ho in Ghana, and Nairobi in Kenya. The following document will use Latent Class Analysis to characterise each food environment. First, let's load the data and then we will analyse each context separately.
+
+```{r message=FALSE, warning=FALSE}
+# Set up
+set.seed(281190)
+library(poLCA)
+library(data.table)
+library(ggplot2)
+
+# Load and tidy data
+# Ghana
+source("./tidy_gis_data_ghana.R")
+ghana <- as.data.table(outlets)
+
+# poLCA requires only positive values i.e. 1/2 not 0/1 - so add 1 onto everything!
+ghana[,c(15:40,51:76,96:111)]<- ghana[,c(15:40,51:76,96:111)] + 1
+
+#Kenya
+source("./tidy_gis_data_kenya.R")
+nairobi <- as.data.table(outlets)
+rm(outlets)
+
+nairobi[,c(23:48,51:56,58:82,93:103)] <- nairobi[,c(23:48,51:56,58:82,93:103)] + 1
+nairobi$outlet_type[nairobi$outlet_type == 9] <- 7 # Recode to help LCA process (else will estimate all parameter values in between)
+nairobi$outlet_type[nairobi$outlet_type == 96] <- 8 
+
+```
+
+#Nairbo, Kenya
+
+We will start with the data for Nairobi. I have run the analysis for as much data as we have that is directly comparable to the Ghana data to aid interpretation. This includes:
+
+* Outlet type - what the outlet was, hether it contains an advertisement and what type of advert it was
+* Foods sold - split by type of food e.g. grains/cereals, fressh meat & poultry, fruit etc
+* Foods being advertised - by same food categories as above
+
+One issue is that we are estimating a lot of parameters here (due to large amount of variables). Should we look to reduce the number of variables (i.e. using PCA) then cluster them first? For now I have not done this but simply run the LCA by itself. 
+
+We want to find the 'best' number of latent classes that describes the data well. An increasing number of clusters will likely always produce a better fitting model (on some metrics), however also brings added complexity through a larger number of groups. What we want to achieve is a parsimonious solution that maximises the model fit, but minimises the number of groups. To do this, we will run the LCA for a range of solutions between 1 and 10 (I am hypothesising that more than 10 classes is not useful). We will then compare model fit between these solutions. What we are looking for is the point where additional groups in the model produces little additional model benefit - this is refered to as the 'knee point'. I have done this for 4 common metrics in LCA research:
+
+1. Akaike Information Criterion (AIC)
+2. Bayesian Information Criterion (BIC)
+3. G-squared statistic
+4. Chi-squared test statistic
+
+Smaller values for each metric represent a better fitting model.
+
+```{r message=FALSE, warning=FALSE}
+# Define variables to be used in LCA to estimate groups (too many variables?)
+f <- with(nairobi, 
+          cbind(# Type of outlet
+           outlet_w_advert, outlet_no_advert, advert_only, supermarket, shop, kiosk, stand_table_top, local_vendor, restaurant, bar_pub, other_outlet, billboard_adv, poster_adv, onsite_adv, painting_adv,
+           # Foods sold
+           grain_cereal, fresh_meat_poultry, fresh_fish_shellfish, procssd_fried_meat_poultry, procssd_fried_fish, trad_mixed_dishes, modern_mixed_dishes, soups_stews, fried_roots_tubers_plntn_pots, nonfried_roots_tubers_plntn_pots, fruits, vegetables, cakes_sweets, savoury_snacks_pies, sodas_sweetened_bevs, milk, fresh_juices, alcohol, sugar_sweet_spreads, tea_coffee, fats_oils, nuts_seeds, legumes_pulses, condiments, eggs, other,
+           # Advertisements (fresh juices missing)
+           adv_grain_cereal, adv_fresh_meat_poultry, adv_fresh_fish_shellfish, adv_procssd_fried_meat_poultry, adv_procssd_fried_fish, adv_trad_mixed_dishes, adv_modern_mixed_dishes, adv_soups_stews, adv_fried_roots_tubers_plntn_pots, adv_nonfried_roots_tubers_plntn_pots, adv_fruits, adv_vegetables, adv_cakes_sweets, adv_savoury_snacks_pies, adv_sodas_sweetened_bevs, adv_milk, adv_alcohol, adv_sugar_sweet_spreads, adv_tea_coffee, adv_fats_oils, adv_nuts_seeds, adv_legumes_pulses, adv_condiments, adv_eggs, adv_other)~1)
+
+# Identify best number of groups
+
+numbers <- c(1:10)
+
+for (i in numbers) {
+  temp <- poLCA(f, nairobi, nclass=i, nrep=20, maxiter=100000, verbose=FALSE, na.rm=T)
+  assign(paste0("lca_all",i), temp)
+  rm(temp)
+}
+
+# Compare solutions
+AIC <- c(rbind(lca_all1$aic, lca_all2$aic, lca_all3$aic, lca_all4$aic, lca_all5$aic,
+               lca_all6$aic, lca_all7$aic, lca_all8$aic, lca_all9$aic, lca_all10$aic))
+BIC <- c(rbind(lca_all1$bic, lca_all2$bic, lca_all3$bic, lca_all4$bic, lca_all5$bic,
+               lca_all6$bic, lca_all7$bic, lca_all8$bic, lca_all9$bic, lca_all10$bic))
+Gsq <- c(rbind(lca_all1$Gsq, lca_all2$Gsq, lca_all3$Gsq, lca_all4$Gsq, lca_all5$Gsq,
+               lca_all6$Gsq, lca_all7$Gsq, lca_all8$Gsq, lca_all9$Gsq, lca_all10$Gsq))
+Chisq <- c(rbind(lca_all1$Chisq, lca_all2$Chisq, lca_all3$Chisq, lca_all4$Chisq, lca_all5$Chisq,
+                 lca_all6$Chisq, lca_all7$Chisq, lca_all8$Chisq, lca_all9$Chisq, lca_all10$Chisq))
+Groups <- c(1:10)
+numb_grps_all <- cbind(Groups,AIC,BIC,Gsq,Chisq) # Put together in one table
+write.table(numb_grps_all, "number_of_groups_nairobi.txt", sep = "\t", row.names = FALSE) # Save
+
+# Plot values
+numb_grps_all <- as.data.frame(numb_grps_all)
+plot1 <- ggplot(numb_grps_all, aes(x = Groups, y = AIC)) + geom_point() + xlab("Number of classes") + ylab("Akaike Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/nairobi_lca_aic.tiff", plot = plot1, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/nairobi_lca_aic.jpeg", plot = plot1, dpi = 300, width = 7, height = 7)
+plot1
+
+plot2 <- ggplot(numb_grps_all, aes(x = Groups, y = BIC)) + geom_point() + xlab("Number of classes") + ylab("Bayesian Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/nairobi_lca_bic.tiff", plot = plot2, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/nairobi_lca_bic.jpeg", plot = plot2, dpi = 300, width = 7, height = 7)
+plot2
+
+plot3 <- ggplot(numb_grps_all, aes(x = Groups, y = Gsq)) + geom_point() + xlab("Number of classes") + ylab("G-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/nairobi_lca_gsq.tiff", plot = plot3, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/nairobi_lca_bic.jpeg", plot = plot3, dpi = 300, width = 7, height = 7)
+plot3
+
+plot4 <- ggplot(numb_grps_all, aes(x = Groups, y = Chisq)) + geom_point() + xlab("Number of classes") + ylab("Chi-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/nairobi_lca_chisq.tiff", plot = plot4, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/nairobi_lca_chisq.jpeg", plot = plot4, dpi = 300, width = 7, height = 7)
+plot4
+
+```
+
+The models suggest the following:
+
+1. AIC - An increasing number of groups produces better fitting models, but with diminishing returns. At 5 groups, the improvements stay relatively flat suggesting that they are not adding much to the solution.
+2. BIC - We broadly see an improving solution upto 5 classes, whereby model performance gets worse with additional groups.
+3. G-squared statistics - an increasing number of groups produces better fitting models, but there is no clear knee point like with the AIC. Relative improvements slow down after 5 classes.
+4. Chi-squared statistic - Any model that is not a 1 class model is a marked improvement. 
+
+Based on these metrics, a 5 class solution was selected as the final model. I have included the model summary below. It includes the conditional probabilities of each class (i.e. their mean characteristics of each input variable) and their class prevalence (i.e. how big they are). Also included is the whole sample average characteristics to aid interpretation.
+
+```{r}
+source("./tidy_poLCA_results.R") # For 5 class solution, if change number of classes then need to manually edit
+write.csv(results, "./cond_prob_nairobi.csv") # Save
+results
+
+```
+
+Ok let's have a look at the conditional probabilities by data category.
+
+###Outlet Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[4:11,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+nairobi_lca1 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Outlet Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("bar_pub" = "bar/pub", "local_vendor" = "local vendor",  "stand_table_top" = "tabletop", "other_outlet" = "other"))
+nairobi_lca1_noleg <- nairobi_lca1 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1 <- ggplot_gtable(ggplot_build(nairobi_lca1)) # With legend
+gt_1$layout$clip[gt_1$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_nairobi.tiff", plot = gt_1, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_nairobi.jpeg", plot = gt_1, dpi = 300, scale = 1)
+plot(gt_1)
+
+gt_1_nl <- ggplot_gtable(ggplot_build(nairobi_lca1_noleg)) # Without legend
+gt_1_nl$layout$clip[gt_1_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_nairobi_noleg.tiff", plot = gt_1_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_nairobi_noleg.jpeg", plot = gt_1_nl, dpi = 300, scale = 1)
+
+# Function to store legend
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(nairobi_lca1) # Store legend
+
+```
+
+### Advert Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[c(1:3, 12:15),] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+nairobi_lca1a <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Advert Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("billboard_adv" = "billboard advert", "onsite_adv" = "onsite advert", "poster_adv" = "poster advert", "outlet_no_advert" = "outlet no advert", "outlet_w_advert"= "outlet with advert", "painting_adv" = "painting", "advert_only" = "advert"))
+nairobi_lca1_nolega <- nairobi_lca1a + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1a <- ggplot_gtable(ggplot_build(nairobi_lca1a)) # With legend
+gt_1a$layout$clip[gt_1a$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_nairobi.tiff", plot = gt_1a, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_nairobi.jpeg", plot = gt_1a, dpi = 300, scale = 1)
+plot(gt_1a)
+
+gt_1_nla <- ggplot_gtable(ggplot_build(nairobi_lca1_nolega)) # Without legend
+gt_1_nla$layout$clip[gt_1_nla$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_nairobi_noleg.tiff", plot = gt_1_nla, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_nairobi_noleg.jpeg", plot = gt_1_nla, dpi = 300, scale = 1)
+
+
+```
+
+###Food being sold
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[16:41,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+nairobi_lca2 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Sold") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes/pulses", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetend drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg.", "nonfried_roots_tubers_plntn_pots" = "root veg.", "fresh_juices" = "fresh juices"))
+nairobi_lca2_noleg <- nairobi_lca2 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_2 <- ggplot_gtable(ggplot_build(nairobi_lca2)) # With legend
+gt_2$layout$clip[gt_2$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_nairobi.tiff", plot = gt_2, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_nairobi.jpeg", plot = gt_2, dpi = 300, scale = 1)
+
+plot(gt_2)
+
+gt_2_nl <- ggplot_gtable(ggplot_build(nairobi_lca2_noleg)) # Without legend
+gt_2_nl$layout$clip[gt_2_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_nairobi_noleg.tiff", plot = gt_2_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_nairobi_noleg.jpeg", plot = gt_2_nl, dpi = 300, scale = 1)
+
+```
+
+###Food being advertised
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[42:65,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+nairobi_lca3 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Advertised") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes/pulses", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetend drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg."))
+nairobi_lca3_noleg <- nairobi_lca3 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_3 <- ggplot_gtable(ggplot_build(nairobi_lca3)) # With legend
+gt_3$layout$clip[gt_3$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_adv_nairobi.tiff", plot = gt_3, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_adv_nairobi.jpeg", plot = gt_3, dpi = 300, scale = 1)
+
+plot(gt_3)
+
+gt_3_nl <- ggplot_gtable(ggplot_build(nairobi_lca3_noleg)) # Without legend
+gt_3_nl$layout$clip[gt_3_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_adv_nairobi_noleg.tiff", plot = gt_3_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_adv_nairobi_noleg.jpeg", plot = gt_3_nl, dpi = 300, scale = 1)
+
+```
+
+Let's join them together into a single plot.
+
+```{r message=FALSE, warning=FALSE}
+library(gridExtra)
+# Create blank plot to centre legend
+blankPlot <- ggplot()+geom_blank(aes(1,1)) + 
+  cowplot::theme_nothing()
+
+# Join together plots into single plot
+# Save as PDF
+pdf("./Plots/nairobi_all_plots.pdf", width = 10, height = 10) 
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+# Save as image/tiff file
+tiff("./Plots/nairobi_all_plots.tiff", width = 10, height = 10, units = "in", res = 300)
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+```
+
+#Accra, Ghana
+
+First, we assess how many latent classes.
+
+```{r message=FALSE, warning=FALSE}
+# Subset Accra data only
+accra <- ghana[ghana$location == "Accra"]
+
+# Define variables to be used in LCA to estimate groups (too many variables?)
+f <- with(accra, 
+          cbind(# Type of outlet (restaurant, social marketing and billboards dropped as none)
+           outlet_w_advert, outlet_no_advert, advert_only, supermarket, shop, kiosk, stand_table_top, local_vendor, bar_pub, other_outlet, poster_adv, onsite_adv, painting_adv,
+           # Foods sold
+           grain_cereal, fresh_meat_poultry, fresh_fish_shellfish, procssd_fried_meat_poultry, procssd_fried_fish, trad_mixed_dishes, modern_mixed_dishes, soups_stews, fried_roots_tubers_plntn_pots, nonfried_roots_tubers_plntn_pots, fruits, vegetables, cakes_sweets, savoury_snacks_pies, sodas_sweetened_bevs, milk, fresh_juices, alcohol, sugar_sweet_spreads, tea_coffee, fats_oils, nuts_seeds, legumes_pulses, condiments, eggs, other,
+           # Advertisements (tea/coffee 0 so dropped, as was nuts/seeds and advert other)
+           adv_grain_cereal, adv_fresh_meat_poultry, adv_fresh_fish_shellfish, adv_procssd_fried_meat_poultry, adv_procssd_fried_fish, adv_trad_mixed_dishes, adv_modern_mixed_dishes, adv_soups_stews, adv_fried_roots_tubers_plntn_pots, adv_nonfried_roots_tubers_plntn_pots, adv_fruits, adv_vegetables, adv_cakes_sweets, adv_savoury_snacks_pies, adv_sodas_sweetened_bevs, adv_milk, adv_fresh_juices, adv_alcohol, adv_sugar_sweet_spreads, adv_fats_oils, adv_legumes_pulses, adv_condiments, adv_eggs)~1)
+
+# Identify best number of groups
+
+numbers <- c(1:10)
+
+for (i in numbers) {
+  temp <- poLCA(f, accra, nclass=i, nrep=20, maxiter=100000, verbose=FALSE, na.rm=T)
+  assign(paste0("lca_all",i), temp)
+  rm(temp)
+}
+
+# Compare solutions
+AIC <- c(rbind(lca_all1$aic, lca_all2$aic, lca_all3$aic, lca_all4$aic, lca_all5$aic,
+               lca_all6$aic, lca_all7$aic, lca_all8$aic, lca_all9$aic, lca_all10$aic))
+BIC <- c(rbind(lca_all1$bic, lca_all2$bic, lca_all3$bic, lca_all4$bic, lca_all5$bic,
+               lca_all6$bic, lca_all7$bic, lca_all8$bic, lca_all9$bic, lca_all10$bic))
+Gsq <- c(rbind(lca_all1$Gsq, lca_all2$Gsq, lca_all3$Gsq, lca_all4$Gsq, lca_all5$Gsq,
+               lca_all6$Gsq, lca_all7$Gsq, lca_all8$Gsq, lca_all9$Gsq, lca_all10$Gsq))
+Chisq <- c(rbind(lca_all1$Chisq, lca_all2$Chisq, lca_all3$Chisq, lca_all4$Chisq, lca_all5$Chisq,
+                 lca_all6$Chisq, lca_all7$Chisq, lca_all8$Chisq, lca_all9$Chisq, lca_all10$Chisq))
+Groups <- c(1:10)
+numb_grps_all <- cbind(Groups,AIC,BIC,Gsq,Chisq) # Put together in one table
+write.table(numb_grps_all, "./number_of_groups_accra.txt", sep = "\t", row.names = FALSE) # Save
+
+# Plot values
+numb_grps_all <- as.data.frame(numb_grps_all)
+plot1 <- ggplot(numb_grps_all, aes(x = Groups, y = AIC)) + geom_point() + xlab("Number of classes") + ylab("Akaike Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/accra_lca_aic.tiff", plot = plot1, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/accra_lca_aic.jpeg", plot = plot1, dpi = 300, width = 7, height = 7)
+plot1
+
+plot2 <- ggplot(numb_grps_all, aes(x = Groups, y = BIC)) + geom_point() + xlab("Number of classes") + ylab("Bayesian Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/accra_lca_bic.tiff", plot = plot2, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/accra_lca_bic.jpeg", plot = plot2, dpi = 300, width = 7, height = 7)
+plot2
+
+plot3 <- ggplot(numb_grps_all, aes(x = Groups, y = Gsq)) + geom_point() + xlab("Number of classes") + ylab("G-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/accra_lca_gsq.tiff", plot = plot3, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/accra_lca_gsq.jpeg", plot = plot3, dpi = 300, width = 7, height = 7)
+plot3
+
+plot4 <- ggplot(numb_grps_all, aes(x = Groups, y = Chisq)) + geom_point() + xlab("Number of classes") + ylab("Chi-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/accra_lca_chisq.tiff", plot = plot4, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/accra_lca_chisq.jpeg", plot = plot4, dpi = 300, width = 7, height = 7)
+plot4
+
+```
+
+Hmmm, a 5 group solution seems best here - roughly where it levels off on three of the metrics. The final one doesn't really help us at all. Let's have a look at the cluster centres and start interpreting the clusters.
+
+```{r}
+source("./tidy_poLCA_results_accra.R") # For 5 class solution, if change number of classes then need to manually edit
+write.csv(results, "./cond_prob_accra.csv") # Save
+results
+```
+
+I will incorporate their interpretation in the following sections below.
+
+###Outlet Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[4:10,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+accra_lca1 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Outlet Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("bar_pub" = "bar/pub", "billboard_adv" = "billboard adv.", "local_vendor" = "local vendor", "onsite_adv" = "onsite adv.", "stand_table_top" = "tabletop", "other_outlet" = "other outlet"))
+accra_lca1_noleg <- accra_lca1 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1 <- ggplot_gtable(ggplot_build(accra_lca1)) # With legend
+gt_1$layout$clip[gt_1$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_accra.tiff", plot = gt_1, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_accra.jpeg", plot = gt_1, dpi = 300, scale = 1)
+plot(gt_1)
+
+gt_1_nl <- ggplot_gtable(ggplot_build(accra_lca1_noleg)) # Without legend
+gt_1_nl$layout$clip[gt_1_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_accra_noleg.tiff", plot = gt_1_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_accra_noleg.jpeg", plot = gt_1_nl, dpi = 300, scale = 1)
+
+# Function to store legend
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(accra_lca1) # Store legend
+
+```
+
+### Advert Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[c(1:3, 11:13),] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+accra_lca1a <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Advert Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("billboard_adv" = "billboard advert", "onsite_adv" = "onsite advert", "poster_adv" = "poster advert", "outlet_no_advert" = "outlet no advert", "outlet_w_advert"= "outlet with advert", "painting_adv" = "painting", "advert_only" = "advert"))
+accra_lca1a_nolega <- accra_lca1a + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1a <- ggplot_gtable(ggplot_build(accra_lca1a)) # With legend
+gt_1a$layout$clip[gt_1a$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_accra.tiff", plot = gt_1a, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_accra.jpeg", plot = gt_1a, dpi = 300, scale = 1)
+plot(gt_1a)
+
+gt_1_nla <- ggplot_gtable(ggplot_build(accra_lca1a_nolega)) # Without legend
+gt_1_nla$layout$clip[gt_1_nla$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_accra_noleg.tiff", plot = gt_1_nla, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_accra_noleg.jpeg", plot = gt_1_nla, dpi = 300, scale = 1)
+
+```
+
+###Food being sold
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[14:39,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+accra_lca2 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Sold") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes/pulses", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetened drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg.", "nonfried_roots_tubers_plntn_pots" = "root veg.", "fresh_juices" = "fresh juices"))
+accra_lca2_noleg <- accra_lca2 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_2 <- ggplot_gtable(ggplot_build(accra_lca2)) # With legend
+gt_2$layout$clip[gt_2$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_accra.tiff", plot = gt_2, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_accra.jpeg", plot = gt_2, dpi = 300, scale = 1)
+plot(gt_2)
+
+gt_2_nl <- ggplot_gtable(ggplot_build(accra_lca2_noleg)) # Without legend
+gt_2_nl$layout$clip[gt_2_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_accra_noleg.tiff", plot = gt_2_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_accra_noleg.jpeg", plot = gt_2_nl, dpi = 300,  scale = 1)
+
+```
+
+###Food being advertised
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[40:61,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+accra_lca3 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Advertised") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetened drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg."))
+accra_lca3_noleg <- accra_lca3 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_3 <- ggplot_gtable(ggplot_build(accra_lca3)) # With legend
+gt_3$layout$clip[gt_3$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_adv_accra.tiff", plot = gt_3, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_adv_accra.jpeg", plot = gt_3, dpi = 300, scale = 1)
+plot(gt_3)
+
+gt_3_nl <- ggplot_gtable(ggplot_build(accra_lca3_noleg)) # Without legend
+gt_3_nl$layout$clip[gt_3_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots low res/lca_food_adv_accra_noleg.jpeg", plot = gt_3_nl, dpi = 300, scale = 1)
+
+```
+
+Let's join them together into a single plot.
+
+```{r message=FALSE, warning=FALSE}
+library(gridExtra)
+# Create blank plot to centre legend
+blankPlot <- ggplot()+geom_blank(aes(1,1)) + 
+  cowplot::theme_nothing()
+
+# Join together plots into single plot
+# Save as PDF
+pdf("./Plots/accra_all_plots.pdf", width = 10, height = 10) 
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+# Save as image/tiff file
+tiff("./Plots/accra_all_plots.tiff", width = 10, height = 10, units = "in", res = 300)
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+```
+
+#Ho
+
+Last site is Ho. First, we assess how many latent classes.
+
+```{r message=FALSE, warning=FALSE}
+# Subset Accra data only
+ho <- ghana[ghana$location == "Ho"]
+
+# Define variables to be used in LCA to estimate groups (too many variables?)
+f <- with(ho, 
+          cbind(# Type of outlet
+           outlet_w_advert, outlet_no_advert, advert_only, supermarket, shop, kiosk, stand_table_top, local_vendor, restaurant, bar_pub, other_outlet, billboard_adv, poster_adv, onsite_adv, painting_adv,
+           # Foods sold
+           grain_cereal, fresh_meat_poultry, fresh_fish_shellfish, procssd_fried_meat_poultry, procssd_fried_fish, trad_mixed_dishes, modern_mixed_dishes, soups_stews, fried_roots_tubers_plntn_pots, nonfried_roots_tubers_plntn_pots, fruits, vegetables, cakes_sweets, savoury_snacks_pies, sodas_sweetened_bevs, milk, fresh_juices, alcohol, sugar_sweet_spreads, tea_coffee, fats_oils, nuts_seeds, legumes_pulses, condiments, eggs, other,
+           # Advertisements
+           adv_grain_cereal, adv_fresh_meat_poultry, adv_fresh_fish_shellfish, adv_procssd_fried_meat_poultry, adv_procssd_fried_fish, adv_trad_mixed_dishes, adv_modern_mixed_dishes, adv_soups_stews, adv_fried_roots_tubers_plntn_pots, adv_nonfried_roots_tubers_plntn_pots, adv_fruits, adv_vegetables, adv_cakes_sweets, adv_savoury_snacks_pies, adv_sodas_sweetened_bevs, adv_milk, adv_fresh_juices, adv_alcohol, adv_sugar_sweet_spreads, adv_tea_coffee, adv_fats_oils, adv_nuts_seeds, adv_legumes_pulses, adv_condiments, adv_eggs, adv_other)~1)
+
+# Identify best number of groups
+
+numbers <- c(1:10)
+
+for (i in numbers) {
+  temp <- poLCA(f, ho, nclass=i, nrep=20, maxiter=100000, verbose=FALSE, na.rm=T)
+  assign(paste0("lca_all",i), temp)
+  rm(temp)
+}
+
+# Compare solutions
+AIC <- c(rbind(lca_all1$aic, lca_all2$aic, lca_all3$aic, lca_all4$aic, lca_all5$aic,
+               lca_all6$aic, lca_all7$aic, lca_all8$aic, lca_all9$aic, lca_all10$aic))
+BIC <- c(rbind(lca_all1$bic, lca_all2$bic, lca_all3$bic, lca_all4$bic, lca_all5$bic,
+               lca_all6$bic, lca_all7$bic, lca_all8$bic, lca_all9$bic, lca_all10$bic))
+Gsq <- c(rbind(lca_all1$Gsq, lca_all2$Gsq, lca_all3$Gsq, lca_all4$Gsq, lca_all5$Gsq,
+               lca_all6$Gsq, lca_all7$Gsq, lca_all8$Gsq, lca_all9$Gsq, lca_all10$Gsq))
+Chisq <- c(rbind(lca_all1$Chisq, lca_all2$Chisq, lca_all3$Chisq, lca_all4$Chisq, lca_all5$Chisq,
+                 lca_all6$Chisq, lca_all7$Chisq, lca_all8$Chisq, lca_all9$Chisq, lca_all10$Chisq))
+Groups <- c(1:10)
+numb_grps_all <- cbind(Groups,AIC,BIC,Gsq,Chisq) # Put together in one table
+write.table(numb_grps_all, "./number_of_groups_ho.txt", sep = "\t", row.names = FALSE) # Save
+
+# Plot values
+numb_grps_all <- as.data.frame(numb_grps_all)
+plot1 <- ggplot(numb_grps_all, aes(x = Groups, y = AIC)) + geom_point() + xlab("Number of classes") + ylab("Akaike Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/ho_lca_aic.tiff", plot = plot1, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/ho_lca_aic.jpeg", plot = plot1, dpi = 300, width = 7, height = 7)
+plot1
+
+plot2 <- ggplot(numb_grps_all, aes(x = Groups, y = BIC)) + geom_point() + xlab("Number of classes") + ylab("Bayesian Information Criterion") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/ho_lca_bic.tiff", plot = plot2, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/ho_lca_bic.jpeg", plot = plot2, dpi = 300, width = 7, height = 7)
+plot2
+
+plot3 <- ggplot(numb_grps_all, aes(x = Groups, y = Gsq)) + geom_point() + xlab("Number of classes") + ylab("G-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/ho_lca_gsq.tiff", plot = plot3, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/ho_lca_gsq.jpeg", plot = plot3, dpi = 300, width = 7, height = 7)
+plot3
+
+plot4 <- ggplot(numb_grps_all, aes(x = Groups, y = Chisq)) + geom_point() + xlab("Number of classes") + ylab("Chi-squared statistic") + scale_x_continuous(limits=c(0, 10), breaks = seq(0,10,2))
+ggsave("./Plots/ho_lca_chisq.tiff", plot = plot4, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/ho_lca_chisq.jpeg", plot = plot4, dpi = 300, width = 7, height = 7)
+plot4
+
+```
+
+Hmmm, a 6 group solution seems best here - roughly where it levels off on three of the metrics. The final one doesn't really help us at all. Let's have a look at the cluster centres and start interpreting the clusters.
+
+```{r}
+source("./tidy_poLCA_results_ho.R") # For 6 class solution, if change number of classes then need to manually edit
+write.csv(results, "./cond_prob_ho.csv") # Save
+results
+```
+
+We will interpret each latent class like before - by variable type.
+
+###Outlet Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[4:11,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+ho_lca1 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Outlet Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("bar_pub" = "bar/pub", "billboard_adv" = "billboard adv.", "local_vendor" = "local vendor", "onsite_adv" = "onsite adv.", "stand_table_top" = "tabletop", "poster_adv" = "poster adv.", "other_adv" = "other adv.", "outlet_no_advert" = "outlet no adv.", "outlet_w_advert"= "outlet with adv.", "painting_adv" = "painting adv.", "poster_adv" = "poster adv.", "advert_only" = "advert", "other_outlet" = "other outlet", "soc_markt_adv" = "social media adv."))
+ho_lca1_noleg <- ho_lca1 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1 <- ggplot_gtable(ggplot_build(ho_lca1)) # With legend
+gt_1$layout$clip[gt_1$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_ho.tiff", plot = gt_1, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_ho.jpeg", plot = gt_1, dpi = 300, scale = 1)
+plot(gt_1)
+
+gt_1_nl <- ggplot_gtable(ggplot_build(ho_lca1_noleg)) # Without legend
+gt_1_nl$layout$clip[gt_1_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_outlet_type_ho_noleg.tiff", plot = gt_1_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_outlet_type_ho_noleg.jpeg", plot = gt_1_nl, dpi = 300, scale = 1)
+
+# Function to store legend
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+
+legend <- get_legend(ho_lca1) # Store legend
+
+```
+
+### Advert Type
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+
+# Reshape the results table into format for ggplot
+library(reshape2)
+hold <- results[c(1:3, 12:15),] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+ho_lca2a <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Advert Types") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("billboard_adv" = "billboard advert", "onsite_adv" = "onsite advert", "poster_adv" = "poster advert", "outlet_no_advert" = "outlet no advert", "outlet_w_advert"= "outlet with advert", "painting_adv" = "painting", "advert_only" = "advert"))
+ho_lca2a_nolega <- ho_lca2a + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_1a <- ggplot_gtable(ggplot_build(ho_lca2a)) # With legend
+gt_1a$layout$clip[gt_1a$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_ho.tiff", plot = gt_1a, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_ho.jpeg", plot = gt_1a, dpi = 300,  scale = 1)
+plot(gt_1a)
+
+gt_1_nla <- ggplot_gtable(ggplot_build(ho_lca2a_nolega)) # Without legend
+gt_1_nla$layout$clip[gt_1_nla$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_advert_type_ho_noleg.tiff", plot = gt_1_nla, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_advert_type_ho_noleg.jpeg", plot = gt_1_nla, dpi = 300, scale = 1)
+
+```
+
+###Food being sold
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[16:41,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+ho_lca2 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Sold") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes/pulses", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetened drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg.", "nonfried_roots_tubers_plntn_pots" = "root veg.", "fresh_juices" = "fresh juices"))
+ho_lca2_noleg <- ho_lca2 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_2 <- ggplot_gtable(ggplot_build(ho_lca2)) # With legend
+gt_2$layout$clip[gt_2$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_ho.tiff", plot = gt_2, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_ho.jpeg", plot = gt_2, dpi = 300, scale = 1)
+plot(gt_2)
+
+gt_2_nl <- ggplot_gtable(ggplot_build(ho_lca2_noleg)) # Without legend
+gt_2_nl$layout$clip[gt_2_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_sold_ho_noleg.tiff", plot = gt_2_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_sold_ho_noleg.jpeg", plot = gt_2_nl, dpi = 300, scale = 1)
+
+```
+
+###Food being advertised
+
+```{r message=FALSE, warning=FALSE}
+# Reshape the results table into format for ggplot
+hold <- results[42:66,] # Take only outlet variables
+temp <- melt((hold), na.rm=TRUE) # Turn into long format
+
+# Polar plot
+ho_lca3 <- ggplot(temp, aes(x=Value, y=value, group = variable, colour=variable)) +
+                  geom_line(size=1.2) + ylim(0,1) +  
+                  coord_polar() + labs(x = NULL, y = NULL, color = "Latent Class") + theme(axis.text.x = element_text(angle = 0, hjust = 1.5, size = 10)) +
+                  theme(legend.position="bottom") + ggtitle("Food Advertised") + theme(plot.title = element_text(hjust = 0.5)) + scale_color_brewer(palette="Set3") + theme(axis.text.y=element_blank(), axis.ticks.y=element_blank()) + theme(plot.margin=unit(c(0.5,2,0.5,2),"cm")) + scale_x_discrete(labels = c("fats_oils" = "fats/oils", "fresh_fish_shellfish" = "fresh fish", "cakes_sweets" = "cakes/sweets", "fresh_meat_poultry" = "fresh meat", "nonfried_roots_tubers_plntn_pots" = "non fried root veg.", "fried_roots_tubers_plntn_pots" = "fried root veg.", "grain_cereal" = "grain/cereal", "legumes_pulses" = "legumes", "modern_mixed_dishes" = "m.dish", "nuts_seeds"= "nuts/seeds", "procssd_fried_fish" = "processed fish", "procssd_fried_meat_poultry" = "processed meat", "savoury_snacks_pies" = "savoury snacks", "sodas_sweetened_bevs" = "sweetened drinks", "soups_stews"= "soups/stews", "sugar_sweet_spreads" = "sweetened spreads", "tea_coffee" = "tea/coffee", "trad_mixed_dishes" = "trad. dishes", "vegetables" = "veg.", "fesh_juices" = "fresh juice"))
+ho_lca3_noleg <- ho_lca3 + theme(legend.position = "none") # Plot without legend
+
+# Plot but have names overlap
+gt_3 <- ggplot_gtable(ggplot_build(ho_lca3)) # With legend
+gt_3$layout$clip[gt_3$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_adv_ho.tiff", plot = gt_3, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_adv_ho.jpeg", plot = gt_3, dpi = 300, scale = 1)
+plot(gt_3)
+
+gt_3_nl <- ggplot_gtable(ggplot_build(ho_lca3_noleg)) # Without legend
+gt_3_nl$layout$clip[gt_3_nl$layout$name == "panel"] <- "off"
+ggsave("./Plots/lca_food_adv_ho_noleg.tiff", plot = gt_3_nl, scale = 1, dpi = 300)
+ggsave("./Plots low res/lca_food_adv_ho_noleg.jpeg", plot = gt_3_nl, dpi = 300, scale = 1)
+
+```
+
+Join all plots together into a single one.
+
+```{r message=FALSE, warning=FALSE}
+library(gridExtra)
+# Create blank plot to centre legend
+blankPlot <- ggplot()+geom_blank(aes(1,1)) + 
+  cowplot::theme_nothing()
+
+# Join together plots into single plot
+# Save as PDF
+pdf("./Plots/ho_all_plots.pdf", width = 10, height = 10) 
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+# Save as image/tiff file
+tiff("./Plots/ho_all_plots.tiff", width = 10, height = 10, units = "in", res = 300)
+grid.arrange(gt_1_nl, gt_1_nla, gt_2_nl, gt_3_nl, legend, ncol = 2, nrow = 3,
+                      widths = c(10, 10), heights = c(10, 10, 4))
+dev.off()
+
+```

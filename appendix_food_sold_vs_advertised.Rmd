@@ -1,0 +1,166 @@
+---
+title: "Appendix: Combinations of foods sold and advertised"
+output: html_notebook
+---
+
+An investigation into the association between items sold and advertised together. First, we need to get the data into the correct format for the analysis.
+
+```{r}
+# Select variables to keep for comparison
+vars <- c("Location", "gis_itemname", "outlet_type", "grain_cereal", "fresh_meat_poultry", "fresh_fish_shellfish", "procssd_fried_meat_poultry", "procssd_fried_fish", "trad_mixed_dishes", "modern_mixed_dishes", "soups_stews", "legumes_pulses", "fried_roots_tubers_plntn_pots", "nonfried_roots_tubers_plntn_pots", "fruits", "vegetables", "milk", "cakes_sweets", "savoury_snacks_pies", "sodas_sweetened_bevs", "sugar_sweet_spreads", "condiments", "fresh_juices", "tea_coffee", "alcohol", "nuts_seeds", "fats_oils", "eggs", "other", "adv_grain_cereal", "adv_fresh_meat_poultry", "adv_fresh_fish_shellfish", "adv_procssd_fried_meat_poultry", "adv_procssd_fried_fish", "adv_trad_mixed_dishes", "adv_modern_mixed_dishes", "adv_fried_roots_tubers_plntn_pots", "adv_nonfried_roots_tubers_plntn_pots", "adv_fruits", "adv_vegetables", "adv_cakes_sweets", "adv_savoury_snacks_pies", "adv_milk", "adv_fresh_juices", "adv_alcohol", "adv_sugar_sweet_spreads", "adv_sodas_sweetened_bevs", "adv_tea_coffee", "adv_fats_oils", "adv_nuts_seeds", "adv_legumes_pulses", "adv_soups_stews", "adv_eggs", "adv_condiments", "adv_other")
+
+# Load Kenya data
+source("./tidy_gis_data_kenya.R")
+outlets$Location <- "Nairobi" # Add in location for when join
+outlets$adv_fresh_juices <- 0 # Since missing
+
+kenya <- outlets[vars] # Subset variables
+kenya$outlet_type[kenya$outlet_type == 1] <- "Supermarket"  # Rename to match Ghana data
+  kenya$outlet_type[kenya$outlet_type == 2] <- "Shop"
+  kenya$outlet_type[kenya$outlet_type == 3] <- "Kiosk"
+  kenya$outlet_type[kenya$outlet_type == 4] <- "Vegetable/fruit/food stand/table top"
+  kenya$outlet_type[kenya$outlet_type == 5] <- "Local vendor"
+  kenya$outlet_type[kenya$outlet_type == 6] <- "Restaurant"
+  kenya$outlet_type[kenya$outlet_type == 9] <- "Bar/pub"
+  kenya$outlet_type[kenya$outlet_type == 96] <- "Other"
+kenya$gis_itemname[kenya$gis_itemname == 1] <- "Food outlet with advertising" # Rename to match Ghana data
+  kenya$gis_itemname[kenya$gis_itemname == 2] <- "Food outlet with no advertising"
+  kenya$gis_itemname[kenya$gis_itemname == 3] <- "Advertising only"
+
+# Load Ghana data
+source("./tidy_gis_data_ghana.R")
+names(outlets)[names(outlets)=="location"] <- "Location" # Rename
+ghana <- outlets[vars] # Subset variables
+ghana$outlet_type <- as.character(ghana$outlet_type) # Edit so matches Kenya data
+  ghana$outlet_type[ghana$outlet_type == "Other (Specify)"] <- "Other" # Rename
+  ghana$outlet_type[ghana$outlet_type == "Drinking Bar/pub"] <- "Bar/pub" # Rename
+
+  # Join together
+fulldata <- rbind(kenya, ghana)
+
+# Subset into data for analysis
+sell <- fulldata[fulldata$gis_itemname == "Food outlet with advertising" | fulldata$gis_itemname == "Food outlet with no advertising",] # Keep only outlets selling foods
+adv <- fulldata[fulldata$gis_itemname == "Food outlet with advertising" | fulldata$gis_itemname == "Advertising only",] # Keep only outlets had adverts
+foodvsadv <- fulldata[fulldata$gis_itemname == "Food outlet with advertising",] # Keep only outlets that sold and had adverts
+
+```
+
+#Combinations of items sold together
+
+Ok, let's have a look at the associations between items sold within the same outlet. We do this via running a Cramers V test to measure the association between our binary variables.
+
+```{r}
+items_sold <- c("grain_cereal", "fresh_meat_poultry", "fresh_fish_shellfish", "procssd_fried_meat_poultry", "procssd_fried_fish", "trad_mixed_dishes", "modern_mixed_dishes", "soups_stews", "legumes_pulses", "fried_roots_tubers_plntn_pots", "nonfried_roots_tubers_plntn_pots", "fruits", "vegetables", "milk", "cakes_sweets", "savoury_snacks_pies", "sodas_sweetened_bevs", "sugar_sweet_spreads", "condiments", "fresh_juices", "tea_coffee", "alcohol", "nuts_seeds", "fats_oils", "eggs", "other")
+
+library(vcd)
+catcorrm <- function(vars, dat) sapply(vars, function(y) sapply(vars, function(x) assocstats(table(dat[,x], dat[,y]))$cramer)) # Calcuate function to run on all combinations of variables
+results <- catcorrm(items_sold, sell) # Run function
+tidyres <- as.data.frame(results) # Tidy up results
+tidyres
+write.csv(tidyres, "./table_d_raw.csv")
+
+```
+
+The strongest association was for alcohol both sold and advertised. Let's have a look at which types of outlets these were for.
+
+```{r}
+
+sell$alc_sold_adv <- 0
+sell$alc_sold_adv[sell$alcohol == 1 & sell$adv_alcohol == 1] <- 1
+table(sell$outlet_type, sell$alc_sold_adv)
+
+```
+
+The majority of outlets that met this criteria were pubs or bars (62.82%). 
+
+Let's look at SSBs sold and advertised together.
+
+```{r}
+
+sell$ssbs_sold_adv <- 0
+sell$ssbs_sold_adv[sell$sodas_sweetened_bevs == 1 & sell$adv_sodas_sweetened_bevs == 1] <- 1
+table(sell$outlet_type, sell$ssbs_sold_adv)
+
+```
+
+High percentages here for bar or pub (15.63%), kiosk (23.44%) and shops (40.63%).
+
+#Combinations of items advertised together
+
+Ok, let's have a look at the association between items advertised together. We do this via running a Cramers V test to measure the association between our binary variables.
+
+```{r}
+items_adv <- c("adv_grain_cereal", "adv_fresh_meat_poultry", "adv_fresh_fish_shellfish", "adv_procssd_fried_meat_poultry", "adv_procssd_fried_fish", "adv_trad_mixed_dishes", "adv_modern_mixed_dishes", "adv_fried_roots_tubers_plntn_pots", "adv_nonfried_roots_tubers_plntn_pots", "adv_fruits", "adv_vegetables", "adv_cakes_sweets", "adv_savoury_snacks_pies", "adv_milk", "adv_fresh_juices", "adv_alcohol", "adv_sugar_sweet_spreads", "adv_sodas_sweetened_bevs", "adv_tea_coffee", "adv_fats_oils", "adv_nuts_seeds", "adv_legumes_pulses", "adv_soups_stews", "adv_eggs", "adv_condiments", "adv_other")
+
+library(vcd)
+catcorrm <- function(vars, dat) sapply(vars, function(y) sapply(vars, function(x) assocstats(table(dat[,x], dat[,y]))$cramer)) # Calcuate function to run on all combinations of variables
+results <- catcorrm(items_adv, adv) # Run function
+tidyres <- as.data.frame(results) # Tidy up results
+tidyres
+write.csv(tidyres, "./table_e_raw.csv")
+
+```
+
+The strongest association was for alcohol both sold and advertised. Let's have a look at which types of outlets these were for.
+
+```{r}
+
+adv$alc_sold_adv <- 0
+adv$alc_sold_adv[adv$alcohol == 1 & adv$adv_alcohol == 1] <- 1
+table(adv$outlet_type, adv$alc_sold_adv)
+
+```
+
+The majority of outlets that met this criteria were pubs or bars (62.82%). 
+
+Let's look at SSBs sold and advertised together.
+
+```{r}
+
+adv$ssbs_sold_adv <- 0
+adv$ssbs_sold_adv[adv$sodas_sweetened_bevs == 1 & adv$adv_sodas_sweetened_bevs == 1] <- 1
+table(adv$outlet_type, adv$ssbs_sold_adv)
+
+```
+
+High percentages here for bar or pub (15.63%), kiosk (23.44%) and shops (40.63%).
+
+#Items sold versus advertised in same outlet
+
+Ok, let's have a look at the association between food sold and food advertised. We do this via running a Cramers V test to measure the association between our binary variables.
+
+```{r}
+
+library(vcd)
+catcorrm <- function(vars, dat) sapply(vars, function(y) sapply(vars, function(x) assocstats(table(dat[,x], dat[,y]))$cramer)) # Calcuate function to run on all combinations of variables
+results <- catcorrm(vars, foodvsadv) # Run function
+tidyres <- as.data.frame(results[3:28,29:54]) # Tidy up results
+tidyres
+write.csv(tidyres, "./table_f_raw.csv")
+
+```
+
+The strongest association was for alcohol both sold and advertised. Let's have a look at which types of outlets these were for.
+
+```{r}
+
+foodvsadv$alc_sold_adv <- 0
+foodvsadv$alc_sold_adv[foodvsadv$alcohol == 1 & foodvsadv$adv_alcohol == 1] <- 1
+table(foodvsadv$outlet_type, foodvsadv$alc_sold_adv)
+
+```
+
+The majority of outlets that met this criteria were pubs or bars (62.82%). 
+
+Let's look at SSBs sold and advertised together.
+
+```{r}
+
+foodvsadv$ssbs_sold_adv <- 0
+foodvsadv$ssbs_sold_adv[foodvsadv$sodas_sweetened_bevs == 1 & foodvsadv$adv_sodas_sweetened_bevs == 1] <- 1
+table(foodvsadv$outlet_type, foodvsadv$ssbs_sold_adv)
+
+```
+
+High percentages here for bar or pub (15.63%), kiosk (23.44%) and shops (40.63%).
+

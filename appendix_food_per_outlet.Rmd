@@ -1,0 +1,128 @@
+---
+title: "Appendix: Number of foods sold per outlet"
+output: html_notebook
+---
+
+An investigation into the number of foods sold per outlet between the three locations. First, we need to get the data into the correct format for the analysis.
+
+```{r}
+# Select variables to keep for comparison
+vars <- c("Location", "outlet_type", "grain_cereal", "fresh_meat_poultry", "fresh_fish_shellfish", "procssd_fried_meat_poultry", "procssd_fried_fish", "trad_mixed_dishes", "modern_mixed_dishes", "soups_stews", "legumes_pulses", "fried_roots_tubers_plntn_pots", "nonfried_roots_tubers_plntn_pots", "fruits", "vegetables", "milk", "cakes_sweets", "savoury_snacks_pies", "sodas_sweetened_bevs", "sugar_sweet_spreads", "condiments", "fresh_juices", "tea_coffee", "alcohol", "nuts_seeds", "fats_oils", "eggs", "other")
+
+# Load Kenya data
+source("./tidy_gis_data_kenya.R")
+outlets$Location <- "Nairobi" # Add in location for when join
+outlets <- outlets[outlets$gis_itemname == 1 | outlets$gis_itemname == 2,] # Keep only outlets that sell food
+kenya <- outlets[vars] # Subset variables
+kenya$outlet_type[kenya$outlet_type == 1] <- "Supermarket"  # Rename to match Ghana data
+  kenya$outlet_type[kenya$outlet_type == 2] <- "Shop"
+  kenya$outlet_type[kenya$outlet_type == 3] <- "Kiosk"
+  kenya$outlet_type[kenya$outlet_type == 4] <- "Vegetable/fruit/food stand/table top"
+  kenya$outlet_type[kenya$outlet_type == 5] <- "Local vendor"
+  kenya$outlet_type[kenya$outlet_type == 6] <- "Restaurant"
+  kenya$outlet_type[kenya$outlet_type == 9] <- "Bar/pub"
+  kenya$outlet_type[kenya$outlet_type == 96] <- "Other"
+
+# Load Ghana data
+source("./tidy_gis_data_ghana.R")
+names(outlets)[names(outlets)=="location"] <- "Location" # Rename
+outlets <- outlets[outlets$gis_itemname == "Food outlet with no advertising" | outlets$gis_itemname == "Food outlet with advertising",] # Keep only outlets that sell food
+ghana <- outlets[vars] # Subset variables
+ghana$outlet_type <- as.character(ghana$outlet_type) # Edit so matches Kenya data
+  ghana$outlet_type[ghana$outlet_type == "Other (Specify)"] <- "Other" # Rename
+  ghana$outlet_type[ghana$outlet_type == "Drinking Bar/pub"] <- "Bar/pub" # Rename
+# Join together
+fulldata <- rbind(kenya, ghana)
+
+```
+
+Ok, we need to calcuate the total number of food and drinks sold by each outlet. We can then have a look at how they vary between location.
+
+```{r}
+fulldata$foodcount <- rowSums(fulldata[3:28], na.rm=T) # Count number of food outlets
+library(data.table)
+fulldata <- as.data.table(fulldata)
+meanitems <- fulldata[, list(mean = mean(foodcount), stddev = sd(foodcount)), by = c("Location")]
+meanitems
+
+```
+
+So we can see that the mean number of items sold was highest in Ho, and lowest in Accra which also had the smallest standard deviation (i.e. less spread around the mean). What about the proportion of outlets selling only single items?
+
+```{r}
+
+prop1 <- as.data.frame(table(fulldata$Location, fulldata$foodcount)) # Number of items sold by location
+prop1 <- prop1[1:3,] # Select only outlets that sold one item
+prop1$Var2 <- NULL # Drop number of items identifier
+prop1$Total <- c(395, 204, 497) # Add in totals of outlets by location [table(fulldata$location)]
+prop1$percent <- (prop1$Freq / prop1$Total) * 100 # Calculate percentage
+prop1 # Print table
+
+```
+
+So there were twice as many single item sellers in Accra than Ho, but the largest proportion was in Nairobi despite having a higher mean than Accra.
+
+Lets compare the distributions of each location.
+
+```{r}
+
+library(ggplot2)
+plot <- ggplot(fulldata, aes(x=foodcount, fill=Location)) + geom_density(alpha=.3) + ylab("Density") + xlab("Number of items sold")
+ggsave("./Plots/foods_per_outlet.tiff", plot = plot, dpi = 300, width = 7, height = 7)
+ggsave("./Plots low res/foods_per_outlet.jpeg", plot = plot, dpi = 100, width = 7, height = 7)
+plot
+```
+
+While Nairobi has a greater proportion of outlets selling single items, Accra has a greater concentration selling few items. So <=2 items in Accra was 41.77%, Ho 18.62% and Nairobi 38.83%. For <=3 items it was 57.47% Accra, 52.11% Nairobi and 25.49% in Ho. For <=4 items, 69.12% Accra, 32.35% Ho and 59.35% Nairobi. Finally, for <= 5 it was 77.73% Accra, 38.23% Ho and 65.79% Nairobi.
+
+The final thing to look at is the number of items sold by outlet type.
+
+```{r}
+
+meanbyoutlet <- fulldata[, list(mean = mean(foodcount), stddev = sd(foodcount)), by = c("outlet_type")]
+meanbyoutlet
+
+```
+
+
+```{r}
+
+prop2 <- as.data.frame(table(fulldata$outlet_type, fulldata$foodcount)) # Number of items sold by location
+prop2 <- prop2[1:12,] # Select only outlets that sold one item
+prop2$Var2 <- NULL # Drop number of items identifier
+prop2$Total <- c(1, 73, 11, 2, 254, 114, 1, 32, 20, 204, 9, 375) # Add in totals of outlets by location [table(fulldata$outlet_type)]
+prop2$percent <- (prop2$Freq / prop2$Total) * 100 # Calculate percentage
+prop2 # Print table
+
+```
+
+How about two items?
+
+```{r}
+
+prop3 <- as.data.frame(table(fulldata$outlet_type, fulldata$foodcount)) # Number of items sold by location
+prop3 <- prop3[1:24,] # Select only outlets that sold one item
+temp <- as.data.table(prop3)
+lesstwo <- temp[,sum(Freq, na.rm=T), by = "Var1"] # Combine counts
+lesstwo$Var2 <- NULL # Drop number of items identifier
+lesstwo$Total <- c(1, 73, 11, 2, 254, 114, 1, 32, 20, 204, 9, 375) # Add in totals of outlets by location [table(fulldata$outlet_type)]
+lesstwo$percent <- (lesstwo$V1 / lesstwo$Total) * 100 # Calculate percentage
+lesstwo # Print table
+
+```
+
+Finally, what about less than 5 items?
+
+```{r}
+
+prop4 <- as.data.frame(table(fulldata$outlet_type, fulldata$foodcount)) # Number of items sold by location
+prop4 <- prop4[1:48,] # Select only outlets that sold one item
+temp <- as.data.table(prop4)
+lessfive <- temp[,sum(Freq, na.rm=T), by = "Var1"] # Combine counts
+lessfive$Var2 <- NULL # Drop number of items identifier
+lessfive$Total <- c(1, 73, 11, 2, 254, 114, 1, 32, 20, 204, 9, 375) # Add in totals of outlets by location [table(fulldata$outlet_type)]
+lessfive$percent <- (lessfive$V1 / lessfive$Total) * 100 # Calculate percentage
+lessfive # Print table
+
+```
+

@@ -1,0 +1,174 @@
+---
+title: 'Describing the food environment: Kenya'
+output:
+  html_document:
+    df_print: paged
+---
+
+The document provides descriptive analyses of the food environment for Ghana utilising the data collected as part of the DFC and TACLED projects.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# Load and tidy data
+source("./tidy_gis_data_kenya.R")
+library(data.table)
+outlets <- as.data.table(outlets)
+```
+
+There were 499 data points (food outlets or advertisements) recorded within the data for Kenya. First, we will compare the type of outlets with and without advertisements. 
+
+```{r}
+
+table <- outlets[, list(Freq = .N), by = c("gis_itemname")]
+table$gis_itemname <- c("Food outlet with advertising", "Food outlet with no advertising", "Advertising only") # Rename
+names(table)[names(table)=="gis_itemname"] <- "Outlet Type" # Tidy up
+table$Percentage <- NA
+table$Percentage <- format(round((table$Freq / 499) * 100,2), nsmall=2)
+
+table
+
+```
+
+There were few advertisements found by themselves (0.4%); much like in Ghana they were more likely to have been found in conjunction with food outlets. There was a smaller proportion of outlets containing advertisements than in either location in Ghana (22.4%). The majority of outlets contained no advertisements (77.2%).
+
+Next, we considered the types of outlets that were found (the blank values here are advertisements only). 
+
+```{r}
+
+table2 <- outlets[, list(Freq = .N), by = c("outlet_type")]
+table2 <- table2[order(table2$outlet_type),] # Order it
+table2$outlet_type <- c("Supermarket", "Shop", "Kiosk", "Vegetable/fruit/food stand/table top", "Local vendor", "Restaurant", "Bar/pub", "Other") # Rename
+table2$Percentage <- NA
+table2$Percentage <- format(round((table2$Freq / 499) * 100,2), nsmall=2)
+
+table2
+
+```
+
+The data reveal different environments when compared to Ghana. The most common outlet was kiosk's (37.9%), followed by shops (17.2%) and vegetable/fruit/food stand/table top (16.4%%). Local vendors were also prevalent (13.4%). The other options were fairly uncommon and there were no markets or bakerys.
+
+We can also examine the types of adverts found as well.
+
+```{r}
+ 
+varNames <- c("billboard_adv", "poster_adv", "onsite_adv", "painting_adv", "soc_markt_adv", "other_adv")
+table_adv <- data.frame(Var1 = character(), Freq = double())
+
+j <- 1
+for (i in 1:6) {
+    
+    i <- i + 50
+
+      temp <- outlets[outlets$advert == 1,] # For adverts only
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      #hold[,1] <- as.numeric(hold[,1])
+      #hold[,2] <- as.numeric(hold[,2])
+      #hold[2,1][is.na(hold[2,1])] <- 1 # In case missing - if has zero's 1 then you will have a line as missing causaing issues.
+      #hold[2,2][is.na(hold[2,2])] <- 0 
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+
+      # Save result
+      table_adv <- rbind(table_adv, hold[4,])
+    
+    j <- j + 1
+    i <- i - 50
+    
+}
+
+names(table_adv)[names(table_adv)=="Var1"] <- "Advert" # Tidy up names
+names(table_adv)[names(table_adv)=="Freq"] <- "Percentage"
+
+table_adv
+
+```
+
+Around half of the data collected contained either a poster (48.2%) or 'On Site/Front of Outlet' advertisements (50%). These values were much higher than found in Ghana. There were few of the other types of adverts found during data collection.
+
+We then examined the most popular foods sold.
+
+```{r}
+varNames <- c("grain_cereal", "fresh_meat_poultry", "fresh_fish_shellfish", "procssd_fried_meat_poultry", "procssd_fried_fish", "trad_mixed_dishes", "modern_mixed_dishes", 
+              "soups_stews", "legumes_pulses", "fried_roots_tubers_plntn_pots", "nonfried_roots_tubers_plntn_pots", "fruits", "vegetables", "milk", "cakes_sweets", 
+              "savoury_snacks_pies", "sodas_sweetened_bevs", "sugar_sweet_spreads", "condiments", "fresh_juices", "tea_coffee", "alcohol", "nuts_seeds", "fats_oils", "eggs", "other")
+table3 <- data.frame(Var1 = character(), Freq = double())
+
+j <- 1
+for (i in 1:26) {
+    
+    i <- i + 22
+
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(outlets[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+
+      # Save result
+      table3 <- rbind(table3, hold[4,])
+      
+    j <- j + 1
+    i <- i - 22
+    
+}
+
+names(table3)[names(table3)=="Var1"] <- "Food"
+names(table3)[names(table3)=="Freq"] <- "Percentage"
+
+table3
+
+```
+
+There is some agreement to the Ghana data in what was sold, but also clear differences. Grains/cereals were the most commonly found (42.3%) much like in Ghana, but where in Ghana fresh juices were common they were less so in Kenya (6.8%). Vegetables were also considerably more popular in Kenya (35.7%) Eggs (34.3%) were also common (similar to Ho), as were sodas and sugar sweetened beverages (35.3%) unlike in Ghana. Fish was relatively uncommon in Kenya, reflecting the inland nature of the country.
+
+Lastly, we examined the most common foods advertised (only for outlets advertising food).
+
+```{r}
+varNames <- c("adv_grain_cereal", "adv_fresh_meat_poultry", "adv_fresh_fish_shellfish", "adv_procssd_fried_meat_poultry", "adv_procssd_fried_fish", "adv_trad_mixed_dishes", 
+              "adv_modern_mixed_dishes", "adv_soups_stews", "adv_legumes_pulses", "adv_fried_roots_tubers_plntn_pots", "adv_nonfried_roots_tubers_plntn_pots", "adv_fruits", 
+              "adv_vegetables", "adv_milk", "adv_cakes_sweets", "adv_savoury_snacks_pies", "adv_sodas_sweetened_bevs", "adv_sugar_sweet_spreads", "adv_condiments", 
+              "adv_fresh_juices", "adv_tea_coffee", "adv_alcohol", "adv_nuts_seeds", "adv_fats_oils", "adv_eggs", "adv_other")
+table4 <- data.frame(Var1 = character(), Freq = double(), Location = character())
+
+j <- 1
+for (i in 1:26) {
+    
+    i <- i + 57
+
+    # Accra
+    temp <- outlets[outlets$advert == 1,]
+    
+      # Calculate percentage for each food type
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(varNames[j])
+
+      # Save result
+      table4 <- rbind(table4, hold[4,])
+
+    j <- j + 1
+    i <- i - 57
+    
+}
+
+names(table4)[names(table4)=="Var1"] <- "Food"
+names(table4)[names(table4)=="Freq"] <- "Percentage"
+
+table4
+
+```
+
+Foods advertised differed to those being sold. The most common item was sodas and sugar sweetened beverages (45.6%), similar to Ghana. Milk (30.7%), tea/coffee (19.3%), cakes/sweets (17.5%), and grains/cereals (14.9%) were also fairly common. Most other foods were rarely advertised. 
+
