@@ -1,0 +1,294 @@
+---
+title: "Appendix C - food sold by outlet type"
+output: html_notebook
+---
+
+```{r message=FALSE, warning=FALSE}
+# Set up
+library(data.table)
+
+```
+
+
+#### Load the data
+
+```{r}
+# Subset variables to be analysed
+vars <- c(# Type of outlet/advert
+          "informal", "outlet_w_advert", "outlet_no_advert", "advert_only", "supermarket", "shop", "kiosk", "stand_table_top", 
+          "local_vendor", "restaurant", "bar_pub", "billboard_adv", "poster_adv", "onsite_adv",  "painting_adv",
+  # Foods sold (expect to increase)
+           "fats_oils", "sugar_sweet_spreads", "fresh_meat_poultry", "fresh_fish_shellfish", "milk", "eggs", "sodas_sweetened_bevs",
+           "alcohol", "processed_fried", "cakes_sweets", "modern_mixed_dishes", "condiments",  
+           # Foods sold (expect to decrease)
+           "staples", "legumes_pulses", "nuts_seeds", "trad_dish", "fruits", "vegetables",
+           # Adverts (expect to increase)
+           "adv_fats_oils", "adv_sugar_sweet_spreads", "adv_fresh_meat_poultry", "adv_fresh_fish_shellfish", 
+           "adv_milk", "adv_eggs", "adv_sodas_sweetened_bevs", "adv_alcohol", "adv_processed_fried", 
+           "adv_cakes_sweets", "adv_modern_mixed_dishes", "adv_condiments",  
+           # Adverts (expect to decrease)
+           "adv_staples", "adv_legumes_pulses", "adv_nuts_seeds", "adv_trad_dish", "adv_fruits", "adv_vegetables"
+)
+
+# Load and tidy data
+source("./tidy_gis_data_ghana.R") # Ghana
+ghana <- outlets[vars]
+source("./tidy_gis_data_kenya.R") #Kenya
+outlets$location <- "Nairobi"
+nairobi <- outlets[vars]
+rm(outlets)
+
+# Join together 
+full_data <- rbind(ghana, nairobi)
+rm(ghana, nairobi)
+
+# Drop those who are now counted in the 'other category'
+full_data$foodcount <- rowSums(full_data[16:33], na.rm=T) # Count of unique items sold
+full_data$advcount <- rowSums(full_data[34:51], na.rm=T) # Count of unique items advertised
+
+full_data$other <- 0 # identify 'other' data points now
+full_data$other[(full_data$foodcount == 0 & full_data$advert_only == 0) | (full_data$advcount == 0 & full_data$advert_only == 1)] <- 1 # Those not measuring the foods we include
+full_data$other[full_data$advert_only == 0 & (full_data$supermarket == 0 & full_data$shop == 0 & 
+                                                full_data$kiosk == 0 & full_data$stand_table_top == 0 &
+                                                full_data$local_vendor == 0 & full_data$restaurant == 0 &
+                                                full_data$bar_pub == 0)] <- 1 # Those that are not captured in our outlet types
+full_data$other[full_data$advert_only == 1 & (full_data$billboard_adv == 0 & full_data$poster_adv == 0 & 
+                                                full_data$onsite_adv == 0 & full_data$painting_adv == 0)] <- 1 # Those not captured in our advert types
+table(full_data$other) # Print to record value dropped
+dropped <- full_data[full_data$other == 1,]
+full_data <- full_data[full_data$other == 0,]
+
+```
+
+#### Informal outlets
+
+Code to recreate Table C4 and C5 in Appendix C
+
+```{r}
+# Create blank tables to hold descriptives
+table_supermarket <- data.frame(Var1 = character(), Freq = double())
+table_shop <- data.frame(Var1 = character(), Freq = double())
+table_kiosk <- data.frame(Var1 = character(), Freq = double())
+table_stand_table_top <- data.frame(Var1 = character(), Freq = double())
+table_local_vendor <- data.frame(Var1 = character(), Freq = double())
+table_restaurant <- data.frame(Var1 = character(), Freq = double())
+table_bar_pub <- data.frame(Var1 = character(), Freq = double())
+table_billboard_adv <- data.frame(Var1 = character(), Freq = double())
+table_poster_adv <- data.frame(Var1 = character(), Freq = double())
+table_onsite_adv <- data.frame(Var1 = character(), Freq = double())
+table_painting_adv <- data.frame(Var1 = character(), Freq = double())
+
+# Set data points with no outlets as missing for purpose of Table 2 (set back to 0 at end of segment for LCA purposes)
+full_data[,c(12:15,34:51)] <- sapply(full_data[,c(12:15,34:51)], function(x)ifelse(full_data$outlet_no_advert == 1,NA,x)) # First part is advert types, second is what was advertised
+
+# Do same for food sold that are adverts only
+full_data[,c(5:11,16:33)] <- sapply(full_data[,c(5:11,16:33)], function(x)ifelse(full_data$advert_only == 1,NA,x)) # First part is outlet type, second is food sold
+
+# Loop through all descriptives
+j <- 1
+for (i in 1:51) { 
+      
+      j <- i
+      
+      # Supermarket #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$supermarket == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j]) 
+
+      # Save result
+      table_supermarket <- rbind(table_supermarket, hold[4,])
+      
+      # Shop #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$shop == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_shop <- rbind(table_shop, hold[4,])
+      
+      # Kiosk #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$kiosk == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_kiosk <- rbind(table_kiosk, hold[4,])
+      
+      # Stand/Table top #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$stand_table_top == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_stand_table_top <- rbind(table_stand_table_top, hold[4,])
+      
+      # Local vendor #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$local_vendor == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_local_vendor <- rbind(table_local_vendor, hold[4,])
+      
+      # Restaurant #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$restaurant == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_restaurant <- rbind(table_restaurant, hold[4,])
+      
+      # Bar / pub #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$bar_pub == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_bar_pub <- rbind(table_bar_pub, hold[4,])
+      
+      # Billboard #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$billboard_adv == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_billboard_adv <- rbind(table_billboard_adv, hold[4,])
+
+      # Poster #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$poster_adv == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_poster_adv <- rbind(table_poster_adv, hold[4,])
+      
+      # Onsite #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$onsite_adv == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_onsite_adv <- rbind(table_onsite_adv, hold[4,])
+
+      # Painting #
+      
+      # Calculate percentage for each outlet type
+      temp <- full_data[full_data$painting_adv == 1,]
+      hold <- as.data.frame(table(temp[[i]]))
+      hold[3,2] <- hold[1,2] + hold[2,2]
+      hold[4,2] <- (hold[2,2] / hold[3,2]) * 100
+      
+      # Paste the food type name
+      hold[,1] <- as.character(hold[,1])
+      hold[4,1] <- paste(vars[j])
+
+      # Save result
+      table_painting_adv <- rbind(table_painting_adv, hold[4,])
+    
+}
+
+# Put data back for LCA purposes
+full_data[,c(12:15,34:51)] <- sapply(full_data[,c(12:15,34:51)], function(x)ifelse(full_data$outlet_no_advert == 1,0,x))
+full_data[,c(5:11,16:33)] <- sapply(full_data[,c(5:11,16:33)], function(x)ifelse(full_data$advert_only == 1,0,x))
+
+# Tidy output
+names(table_supermarket)[names(table_supermarket)=="Var1"] <- "Food type"
+names(table_supermarket)[names(table_supermarket)=="Freq"] <- "Supermarket (%)"
+names(table_shop)[names(table_shop)=="Freq"] <- "Shop (%)"
+names(table_kiosk)[names(table_kiosk)=="Freq"] <- "Kiosk (%)"
+names(table_stand_table_top)[names(table_stand_table_top)=="Freq"] <- "Stand/table top (%)"
+names(table_local_vendor)[names(table_local_vendor)=="Freq"] <- "Local Vendor (%)"
+names(table_restaurant)[names(table_restaurant)=="Freq"] <- "Restaurant (%)"
+names(table_bar_pub)[names(table_bar_pub)=="Freq"] <- "Bar / Pub (%)"
+names(table_billboard_adv)[names(table_billboard_adv)=="Freq"] <- "Billboard (%)"
+names(table_poster_adv)[names(table_poster_adv)=="Freq"] <- "Poster (%)"
+names(table_onsite_adv)[names(table_onsite_adv)=="Freq"] <- "Onsite advert (%)"
+names(table_painting_adv)[names(table_painting_adv)=="Freq"] <- "Painting (%)"
+
+# Join together into single table
+table_appc <- cbind(table_supermarket, table_shop)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_kiosk)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_stand_table_top)
+table_appc$Var1 <- NULL
+
+# Tidy
+write.csv(table_appc, "./appendix_c.csv")
+table_appc # Print results
+
+```
+
+
+
+
