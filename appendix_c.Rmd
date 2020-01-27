@@ -62,7 +62,7 @@ full_data <- full_data[full_data$other == 0,]
 
 #### Informal outlets
 
-Code to recreate Table C4 and C5 in Appendix C
+Code to recreate Table C5 and C6 in Appendix C
 
 ```{r}
 # Create blank tables to hold descriptives
