@@ -1,0 +1,162 @@
+---
+title: "Appendix A: Maps of data"
+author: Mark A Green
+output: html_notebook
+---
+
+The following notebook is to create a series of simple maps for inclusion in Appendix A of the paper. First we need to load the data
+
+```{r}
+## Load Kenya data ##ß
+source("./tidy_gis_data_kenya.R")
+nairobi <- outlets
+
+# Edit Latitude variable
+nairobi$lat <- nairobi$gis_longitude # Are coded the wrong way round here
+nairobi$lat = gsub("°", " ", nairobi$lat) # Replace ° with with a space
+nairobi$lat = gsub("Â", "", nairobi$lat) # Get rid of Â
+nairobi$lat = gsub("'", "", nairobi$lat) # Get rid of '
+nairobi$lat = gsub("S", "-", nairobi$lat) # Get rid of S 
+
+# Edit Latitude variable
+nairobi$long <- nairobi$gis_latitude
+nairobi$long = gsub('°', ' ', nairobi$long)
+nairobi$long = gsub("Â", "", nairobi$long)
+nairobi$long = gsub("'", "", nairobi$long) 
+nairobi$long = gsub("E", "", nairobi$long) 
+
+# Convert from decimal minutes to decimal degrees
+library(measurements)
+nairobi$lat2 = measurements::conv_unit(nairobi$lat, from = 'deg_dec_min', to = 'dec_deg')
+nairobi$lat2 <- as.numeric(nairobi$lat2) # Since is character
+nairobi$long2 = measurements::conv_unit(nairobi$long, from = 'deg_dec_min', to = 'dec_deg')
+nairobi$long2 <- as.numeric(nairobi$long2)
+
+##------------------##
+
+## Load Ghana data ##
+source("./tidy_gis_data_ghana.R")
+
+# Edit Latitude variable
+outlets$lat <- outlets$gis_latitude # Is correct wy round here
+outlets$lat = gsub("°", " ", outlets$lat) # Replace ° with with a space
+outlets$lat[outlets$lat == "N05 .32.146'"] <- "N05 32.146'" # Manually edit
+outlets$lat = gsub("Â", "", outlets$lat) # Get rid of Â
+outlets$lat = gsub("'", "", outlets$lat) # Get rid of '
+outlets$lat = gsub("N", "", outlets$lat) # Get rid of N
+outlets$lat = gsub("M", "", outlets$lat) # Get rid of M (data input error)
+outlets$lat = gsub("E", "", outlets$lat) # Get rid of E M (data input error - is latitude have checked manually)
+outlets$lat[outlets$lat == "06   36.258"] <- "06 36.258" # Manually edit
+
+# Edit Latitude variable
+outlets$long <- outlets$gis_longitude
+outlets$long = gsub('°', ' ', outlets$long)
+outlets$lat[outlets$lat == "E000 .28.568'"] <- "E000 28.568'" # Manually edit
+outlets$long = gsub("Â", "", outlets$long)
+outlets$long = gsub("'", "", outlets$long) 
+outlets$long = gsub("E", "", outlets$long) 
+outlets$long = gsub("W", "-", outlets$long) 
+outlets$long = gsub('°', ' ', outlets$long)
+outlets$long[outlets$long == "000   28.646"] <- "000 28.646" # Manually edit
+outlets$long[outlets$long == "000 28.6111"] <- "000 28.611"
+outlets$long[outlets$long == "000 .28.568"] <- "000 28.568"
+outlets$long[outlets$long == "0000 28.495"] <- "000 28.495"
+outlets$long[outlets$long == "000 28,577"] <- "000 28.577"
+
+# Convert from decimal minutes to decimal degrees
+outlets$lat2 = measurements::conv_unit(outlets$lat, from = 'deg_dec_min', to = 'dec_deg')
+outlets$lat2 <- as.numeric(outlets$lat2) # Since is character
+outlets$long2 = measurements::conv_unit(outlets$long, from = 'deg_dec_min', to = 'dec_deg')
+outlets$long2 <- as.numeric(outlets$long2)
+
+# Split Ghana data into two locations
+accra <- outlets[outlets$location == "Accra",] # Accra
+ho <- outlets[outlets$location == "Ho",] # Ho
+
+rm(outlets)
+
+```
+
+We will plot just the points for each location separately and use Google maps as the background to help situate readers.
+
+###Nairobi
+
+City level:
+
+```{r}
+# To find extent of map
+library(ggplot2)
+ggplot() + geom_point(data = nairobi, aes(x = long2, y = lat2))
+
+library(ggmap) # Used stamen as open source
+nairobi_base_map <- get_stamenmap(bbox = c(left = 36.85,bottom = -1.3,right = 36.88,top = -1.280), maptype = "terrain", crop = F, zoom = 12)
+map1 <- ggmap(nairobi_base_map) + geom_point(data=nairobi, aes(x=long2, y=lat2), color="red", size = 0.01) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/nairobi_map_stamen.tiff", plot = map1, dpi = 300)
+ggsave("./Plots low res/nairobi_map_stamen.jpeg", plot = map1, dpi = 300)
+map1
+
+```
+
+Makadara:
+
+```{r}
+makadara_base_map <- get_map(location = "Maringo, Nairobi", zoom = 14, maptype = 'terrain')
+map1_zoom <- ggmap(makadara_base_map) + geom_point(data=nairobi, aes(x=long2, y=lat2), color="red", size = 0.5) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/makadara_map.tiff", plot = map1_zoom, dpi = 300)
+ggsave("./Plots low res/makadara_map.jpeg", plot = map1_zoom, dpi = 300)
+map1_zoom
+
+```
+
+###Accra
+
+City level:
+
+```{r message=FALSE, warning=FALSE}
+# Drop erronous data
+accra$lat2[accra$lat2 < 5.53] <- NA
+accra$long2[accra$long2 > -0.207] <- NA
+
+# Plot
+accra_base_map <- get_stamenmap(bbox = c(left = -0.2159, bottom = 5.53, right = -0.209, top = 5.54), maptype = "terrain", crop = F, zoom = 14)
+map2 <- ggmap(accra_base_map) + geom_point(data=accra, aes(x=long2, y=lat2), color="red", size = 0.01) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/accra_map_stamen.tiff", plot = map2, dpi = 300)
+ggsave("./Plots low res/james_town_map_stamen.jpeg", plot = map2, dpi = 300)
+map2
+
+```
+
+James Town:
+
+```{r message=FALSE, warning=FALSE}
+jt_base_map <- get_map(location = "James Town, Accra", zoom = 15, maptype = 'terrain') # zoom = 16 also looks good
+map2_zoom <- ggmap(jt_base_map) + geom_point(data=accra, aes(x=long2, y=lat2), color="red", size = 0.5) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/james_town_map.tiff", plot = map2_zoom, dpi = 300)
+ggsave("./Plots low res/james_town_zoom.jpeg", plot = map2_zoom, dpi = 300)
+map2_zoom
+
+```
+
+###Ho
+
+City level:
+
+```{r}
+ho_base_map <- get_stamenmap(bbox = c(left = 0.466, bottom = 6.603, right = 0.484, top = 6.618), maptype = "terrain", crop = F, zoom = 12)
+map3 <- ggmap(ho_base_map) + geom_point(data=ho, aes(x=long2, y=lat2), color="red", size = 0.01) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/ho_map_stamen.tiff", plot = map3, dpi = 300)
+ggsave("./Plots low res/ho_map_stamen.jpeg", plot = map3, dpi = 300)
+map3
+
+```
+
+Neighbourhood (Lokoe?):
+
+```{r}
+ho_zoom_base_map <- get_map(location = "Ho, Ghana", zoom = 14, maptype = 'terrain')
+map3_zoom <- ggmap(ho_zoom_base_map) + geom_point(data=ho, aes(x=long2, y=lat2), color="red", size = 0.5) + xlab("Longitude") + ylab("Latitude")
+ggsave("./Plots/ho_zoom_map.tiff", plot = map3_zoom, dpi = 300)
+ggsave("./Plots low res/ho_zoom_map.jpeg", plot = map3_zoom, dpi = 300)
+map3_zoom
+
+```
