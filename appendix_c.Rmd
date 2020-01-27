@@ -62,7 +62,7 @@ full_data <- full_data[full_data$other == 0,]
 
 #### Informal outlets
 
-Code to recreate Table C5 and C6 in Appendix C
+Code to recreate Table C4 and C5 in Appendix C
 
 ```{r}
 # Create blank tables to hold descriptives
@@ -281,6 +281,20 @@ table_appc$Var1 <- NULL
 table_appc <- cbind(table_appc, table_kiosk)
 table_appc$Var1 <- NULL
 table_appc <- cbind(table_appc, table_stand_table_top)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_local_vendor)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_restaurant)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_bar_pub)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_billboard_adv)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_poster_adv)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_onsite_adv)
+table_appc$Var1 <- NULL
+table_appc <- cbind(table_appc, table_painting_adv)
 table_appc$Var1 <- NULL
 
 # Tidy
